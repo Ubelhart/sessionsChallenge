@@ -11,9 +11,15 @@ const { faker } = require("@faker-js/faker");
 
 const { containerMessages, containerProducts } = require("./Container");
 const session = require("express-session");
+
 const MongoStore = require("connect-mongo");
 const advancedOptions = { useNewUrlParser: true, useUnifiedTopology: true };
+const User = require("./models/users");
 const mongoDbKey = require("../options/mongoDb.js");
+
+const passport = require("passport");
+const LocalStrategy = require("passport-local").Strategy;
+const bcrypt = require("bcrypt");
 
 io.on("connection", async (socket) => {
   console.log("Un cliente se ha conectado");
@@ -43,48 +49,120 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(
   session({
-    store: MongoStore.create({
-      mongoUrl: mongoDbKey,
-      mongoOptions: advancedOptions,
-      ttl: 600
-    }),
     secret: "secreto",
-    resave: false,
+    cookie: { httpOnly: false, secure: false, maxAge: 1000 * 600 },
+    rolling: true,
+    resave: true,
     saveUninitialized: false
   })
 );
+app.use(passport.initialize());
+app.use(passport.session());
 
 app.set("views", "./views");
 app.set("view engine", "ejs");
 
+function isValidPassword(user, password) {
+  return bcrypt.compareSync(password, user.password);
+}
+
+passport.use(
+  "login",
+  new LocalStrategy((username, password, done) => {
+    User.findOne({ username: username }, (err, user) => {
+      if (err) {
+        return done(err);
+      }
+      if (!user) {
+        return done(null, false);
+      }
+      if (!isValidPassword(user, password)) {
+        return done(null, false);
+      }
+      return done(null, user);
+    });
+  })
+);
+
+function createHash(password) {
+  return bcrypt.hashSync(password, bcrypt.genSaltSync(10), null);
+}
+
+passport.use(
+  "signup",
+  new LocalStrategy(
+    { passReqToCallback: true },
+    (req, username, password, done) => {
+      User.findOne({ username: username }, (err, user) => {
+        if (err) {
+          return done(err);
+        }
+        if (user) {
+          return done(null, false);
+        }
+        const newUser = new User({
+          username: username,
+          password: createHash(password)
+        });
+        newUser.save((err) => {
+          if (err) {
+            return done(err);
+          }
+          return done(null, newUser);
+        });
+      });
+    }
+  )
+);
+
+passport.serializeUser((user, done) => {
+  const { username, _id } = user;
+  const response = { username, _id };
+  done(null, response);
+});
+
+passport.deserializeUser(({ _id }, done) => {
+  User.findById(_id, (err, user) => {
+    if (err) {
+      return done(err);
+    }
+    return done(null, user);
+  });
+});
+
 app.get("/", (req, res) => {
-  const { user } = req.session;
-  if (user) {
-    return res.render("form", { user });
+  if (req.session.passport) {
+    const { username } = req.session.passport.user;
+    return res.render("form", { username });
   }
   res.redirect("/login");
 });
 
+app.get("/register", (req, res) => {
+  res.render("register");
+});
+
+app.post(
+  "/register",
+  passport.authenticate("signup", {
+    successRedirect: "/login",
+    failureRedirect: "/register"
+  })
+);
+
 app.get("/login", (req, res) => {
-  if (req.session.user) {
-    return res.redirect("/");
-  }
   res.render("login");
 });
 
-app.post("/login", (req, res) => {
-  req.session.user = req.body.user;
-  res.redirect("/");
-});
+app.post(
+  "/login",
+  passport.authenticate("login", {
+    successRedirect: "/",
+    failureRedirect: "/login"
+  })
+);
 
-app.get("/logout", (req, res) => {
-  const { user } = req.session;
-  if (user) {
-    req.session.destroy();
-    return res.render("logout", { user });
-  }
-  res.redirect("/login");
-});
+app.get("/logout", (req, res) => {});
 
 app.get("/api/productos-test", (req, res) => {
   const products = [];

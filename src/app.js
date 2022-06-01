@@ -12,10 +12,7 @@ const { faker } = require("@faker-js/faker");
 const { containerMessages, containerProducts } = require("./Container");
 const session = require("express-session");
 
-const MongoStore = require("connect-mongo");
-const advancedOptions = { useNewUrlParser: true, useUnifiedTopology: true };
 const User = require("./models/users");
-const mongoDbKey = require("../options/mongoDb.js");
 
 const passport = require("passport");
 const LocalStrategy = require("passport-local").Strategy;
@@ -74,9 +71,11 @@ passport.use(
         return done(err);
       }
       if (!user) {
+        console.log("Usuario no encontrado");
         return done(null, false);
       }
       if (!isValidPassword(user, password)) {
+        console.log("Contraseña incorrecta");
         return done(null, false);
       }
       return done(null, user);
@@ -98,6 +97,7 @@ passport.use(
           return done(err);
         }
         if (user) {
+          console.log("Usuario ya existe");
           return done(null, false);
         }
         const newUser = new User({
@@ -146,9 +146,13 @@ app.post(
   "/register",
   passport.authenticate("signup", {
     successRedirect: "/login",
-    failureRedirect: "/register"
+    failureRedirect: "/failregister"
   })
 );
+
+app.get("/failregister", (req, res) => {
+  res.render("failregister");
+});
 
 app.get("/login", (req, res) => {
   res.render("login");
@@ -158,11 +162,26 @@ app.post(
   "/login",
   passport.authenticate("login", {
     successRedirect: "/",
-    failureRedirect: "/login"
+    failureRedirect: "/faillogin"
   })
 );
 
-app.get("/logout", (req, res) => {});
+app.get("/faillogin", (req, res) => {
+  res.render("faillogin");
+});
+
+app.get("/logout", (req, res) => {
+  if (req.session.passport) {
+    const { username } = req.session.passport.user;
+    return req.logOut((err) => {
+      if (err) {
+        return res.redirect("/login");
+      }
+      return res.render("logout", { username });
+    });
+  }
+  res.redirect("/login");
+});
 
 app.get("/api/productos-test", (req, res) => {
   const products = [];

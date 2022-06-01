@@ -26,7 +26,7 @@ function addProducts() {
   const newProduct = {
     title: document.getElementById("title").value,
     price: document.getElementById("price").value,
-    thumbnail: document.getElementById("thumbnail").value,
+    thumbnail: document.getElementById("thumbnail").value
   };
   socket.emit("new-products", newProduct);
 }
@@ -41,7 +41,7 @@ function renderMessage(posts) {
   const postSchema = new normalizr.schema.Entity(
     "post",
     {
-      author: authorSchema,
+      author: authorSchema
     },
     { idAttribute: "_id" }
   );
@@ -115,9 +115,9 @@ function addMessage() {
       lastName: document.getElementById("lastName").value,
       age: document.getElementById("age").value,
       alias: document.getElementById("alias").value,
-      avatar: document.getElementById("avatar").value,
+      avatar: document.getElementById("avatar").value
     },
-    message: document.getElementById("message").value,
+    message: document.getElementById("message").value
   };
 
   socket.emit("new-message", newMessage);
